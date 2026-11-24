@@ -23,6 +23,9 @@ node_modules/
 frontend/dist/
 *.tsbuildinfo
 
+# Browser automation output (local UI checks)
+.playwright-mcp/
+
 # Editors and OS
 .idea/
 .vscode/

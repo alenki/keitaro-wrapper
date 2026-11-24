@@ -134,6 +134,18 @@ async def test_campaign_deleted_in_keitaro_is_removed_locally(client, fake_keita
         assert await conn.scalar(text("SELECT count(*) FROM campaigns")) == 0
 
 
+async def test_opened_campaign_still_loads_when_keitaro_lists_are_down(make_client, fake_keitaro):
+    campaign, _, _ = fake_keitaro.add_campaign_with_streams([(18001, 100)])
+    async with make_client(catalog_ttl_seconds=0) as client:
+        await client.get(f"/api/campaigns/{campaign['id']}")
+        fake_keitaro.fail("GET", "/domains", status=503, times=3)
+
+        response = await client.get(f"/api/campaigns/{campaign['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["domain"] == {"id": 1813, "name": "#1813"}
+
+
 async def test_unknown_campaign_is_not_found(client):
     response = await client.get("/api/campaigns/424242")
 

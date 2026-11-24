@@ -1,12 +1,17 @@
 """Turn database objects into API responses."""
 
+import logging
+
 from app.api.schemas import CampaignOut, NamedOut, StreamOfferOut, StreamOut
 from app.config import Settings
+from app.keitaro.errors import KeitaroError
 from app.keitaro.schemas import KtNamed
 from app.models import Campaign, Stream
-from app.services.catalog import Catalog
+from app.services.catalog import CampaignFormOptions, Catalog
 from app.services.editor import is_dirty
 from app.services.shares import active_total
+
+logger = logging.getLogger(__name__)
 
 
 def stream_out(stream: Stream) -> StreamOut:
@@ -37,7 +42,12 @@ def stream_out(stream: Stream) -> StreamOut:
 
 
 async def campaign_out(campaign: Campaign, catalog: Catalog, settings: Settings) -> CampaignOut:
-    options = await catalog.campaign_form_options()
+    try:
+        options = await catalog.campaign_form_options()
+    except KeitaroError:
+        # The editor works from the local copy; without Keitaro the names fall back to ids
+        logger.warning("keitaro lists unavailable, showing ids", extra={"campaign_id": campaign.id})
+        options = CampaignFormOptions(domains=[], groups=[], traffic_sources=[])
     return CampaignOut(
         id=campaign.id,
         name=campaign.name,

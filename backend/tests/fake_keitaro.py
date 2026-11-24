@@ -94,6 +94,33 @@ class FakeKeitaro:
         self.streams[stream["id"]] = stream
         return stream
 
+    def add_campaign_with_streams(
+        self, offers: list[tuple[int, int]], *, name: str = "test_karaf_campaign1"
+    ) -> tuple[dict, dict, dict]:
+        """A campaign shaped like the ones the creator makes: geo -> Google, then offers."""
+        campaign = self.add_campaign(name, domain_id=1813, group_id=10332, traffic_source_id=836)
+        geo = self.add_stream(
+            campaign["id"],
+            name="Geo AU",
+            schema="redirect",
+            action_payload="https://google.com",
+            filters=[{"name": "country", "mode": "accept", "payload": ["AU"]}],
+        )
+        offers_stream = self.add_stream(
+            campaign["id"],
+            name="Offers",
+            type="default",
+            offers=[{"offer_id": offer_id, "share": share} for offer_id, share in offers],
+        )
+        return campaign, geo, offers_stream
+
+    def set_stream_offers(self, stream_id: int, offers: list[tuple[int, int, str]]) -> None:
+        """Change offers the way somebody would in the Keitaro admin."""
+        self.streams[stream_id]["offers"] = [
+            {"offer_id": offer_id, "share": share, "state": state}
+            for offer_id, share, state in offers
+        ]
+
     def stream_offers(self, stream_id: int) -> list[tuple[int, int, str]]:
         return [(o["offer_id"], o["share"], o["state"]) for o in self.streams[stream_id]["offers"]]
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app import __version__
-from app.api import catalog, health
+from app.api import campaigns, catalog, health
 from app.config import Settings, get_settings
 from app.db import create_engine
 from app.errors import register_error_handlers
@@ -14,6 +14,7 @@ from app.keitaro.client import KeitaroClient
 from app.log import setup_logging
 from app.middleware import RequestContextMiddleware
 from app.services.catalog import Catalog
+from app.services.editor import Editor
 
 
 def create_app(
@@ -39,7 +40,9 @@ def create_app(
         )
         app.state.session_factory = session_factory
         app.state.keitaro = keitaro
-        app.state.catalog = Catalog(keitaro, session_factory, settings.catalog_ttl_seconds)
+        catalog = Catalog(keitaro, session_factory, settings.catalog_ttl_seconds)
+        app.state.catalog = catalog
+        app.state.editor = Editor(keitaro, catalog)
         try:
             yield
         finally:
@@ -59,4 +62,5 @@ def create_app(
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(catalog.router, prefix="/api")
+    app.include_router(campaigns.router, prefix="/api")
     return app

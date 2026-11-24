@@ -8,12 +8,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PREFIX_PATTERN = re.compile(r"^test_[a-z0-9]+_$")
 
 
-class Settings(BaseSettings):
-    """App configuration, read from environment variables with the same names."""
+class DatabaseSettings(BaseSettings):
+    """Just the database part: migrations need nothing else."""
 
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
     database_url: str
+
+    @field_validator("database_url")
+    @classmethod
+    def _require_asyncpg(cls, value: str) -> str:
+        if not value.startswith("postgresql+asyncpg://"):
+            raise ValueError("must start with postgresql+asyncpg://")
+        return value
+
+
+class Settings(DatabaseSettings):
+    """App configuration, read from environment variables with the same names."""
+
     keitaro_url: str = "https://keitaro-for-tests.etolegko.com"
     keitaro_api_key: SecretStr
     keitaro_timeout_seconds: float = 10.0
@@ -24,13 +36,6 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Built frontend; by default backend/static, which exists only in the Docker image
     static_dir: str | None = None
-
-    @field_validator("database_url")
-    @classmethod
-    def _require_asyncpg(cls, value: str) -> str:
-        if not value.startswith("postgresql+asyncpg://"):
-            raise ValueError("must start with postgresql+asyncpg://")
-        return value
 
     @field_validator("keitaro_url")
     @classmethod

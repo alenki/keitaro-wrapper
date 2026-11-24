@@ -1,0 +1,127 @@
+.shell {
+  min-height: 100vh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  color: #f2f0ea;
+  background: var(--ink);
+  border-bottom: 3px solid var(--draft);
+}
+
+.bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1120px;
+  height: 56px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  text-decoration: none;
+}
+
+.mark {
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  /* two flows of one campaign: Google and the offers */
+  background: linear-gradient(135deg, var(--draft) 0 50%, #2fb393 50% 100%);
+  border-radius: 4px;
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.brandSub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #a9a7a0;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+}
+
+.navLink {
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #c9c7c0;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition:
+    color 120ms,
+    background-color 120ms;
+}
+
+.navLink:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.navActive {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+@media (max-width: 640px) {
+  .bar {
+    padding: 0 16px;
+  }
+
+  .brandSub,
+  .long {
+    display: none;
+  }
+
+  .navLink {
+    padding: 8px 10px;
+  }
+
+  .main {
+    padding: 20px 16px 48px;
+  }
+}
+
+@media (max-width: 400px) {
+  .bar {
+    gap: 8px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brandName {
+    font-size: 14px;
+  }
+
+  .nav {
+    gap: 2px;
+  }
+
+  .navLink {
+    padding: 8px;
+    font-size: 13px;
+  }
+}

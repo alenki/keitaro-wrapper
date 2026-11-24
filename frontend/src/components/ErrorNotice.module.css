@@ -1,0 +1,18 @@
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.requestId {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.requestId code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

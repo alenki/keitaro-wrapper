@@ -112,7 +112,12 @@ class CampaignCreator:
         await session.commit()
         logger.info(
             "campaign created",
-            extra={"campaign_id": campaign.id, "name": name, "geo": geo, "offer_id": offer_id},
+            extra={
+                "campaign_id": campaign.id,
+                "campaign_name": name,
+                "geo": geo,
+                "offer_id": offer_id,
+            },
         )
         return await load_campaign(session, campaign.id)
 

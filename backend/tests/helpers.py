@@ -14,7 +14,8 @@ def make_settings(**overrides) -> Settings:
         "keitaro_url": "http://keitaro.test",
         "keitaro_api_key": "test-key",
         "campaign_prefix": "test_karaf_",
-        "log_level": "WARNING",
+        # INFO, so every log call in the code really builds a record during tests
+        "log_level": "INFO",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

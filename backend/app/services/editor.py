@@ -12,7 +12,7 @@ from app.keitaro.errors import KeitaroNotFound
 from app.keitaro.schemas import KtCampaign, KtStream, KtStreamOffer
 from app.models import Campaign, OfferState, Stream, StreamOffer
 from app.services.catalog import Catalog
-from app.services.shares import rebalance
+from app.services.shares import TOTAL, active_total, rebalance
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,68 @@ class Editor:
                 binding.share = binding.published_share or 0
         await session.commit()
         logger.info("draft cancelled", extra={"stream_id": stream_id})
+        return await load_stream(session, stream_id)
+
+    async def push(self, session: AsyncSession, stream_id: int) -> Stream:
+        """Send the draft to Keitaro.
+
+        The stream row stays locked while Keitaro is called (at most the client timeout), so
+        two pushes of one stream can't interleave.
+        """
+        stream = await lock_stream(session, stream_id)
+        if not is_dirty(stream):
+            return stream
+
+        offers = sorted(stream.offers, key=lambda binding: binding.position)
+        if not any(b.state == OfferState.ACTIVE for b in offers):
+            raise ConflictError("В потоке нет активных офферов", code="no_active_offers")
+        total = active_total(offers)
+        if total != TOTAL:
+            raise ConflictError(
+                f"Сумма долей активных офферов {total}%, а должна быть 100%. "
+                "Открепите оффер или измените состав потока",
+                code="shares_not_100",
+            )
+
+        try:
+            current = await self._keitaro.get_stream(stream_id)
+        except KeitaroNotFound:
+            raise NotFoundError(
+                "Поток удалён в Keitaro, загрузите кампанию заново", code="stream_not_found"
+            ) from None
+        in_keitaro = {(o.offer_id, o.share, _state_from_keitaro(o.state)) for o in current.offers}
+        draft = {(b.offer_id, b.share, b.state) for b in offers if b.state != OfferState.REMOVED}
+        last_seen = {
+            (b.offer_id, b.published_share, b.published_state)
+            for b in offers
+            if b.published_state in (OfferState.ACTIVE, OfferState.DISABLED)
+        }
+
+        if in_keitaro == draft:
+            # An earlier push got through but its answer was lost: nothing left to send
+            kt_offers = current.offers
+        elif in_keitaro != last_seen:
+            # Keitaro has no versions, so this is how a change made elsewhere is noticed
+            raise ConflictError(
+                "Поток изменили в Keitaro после загрузки. Загрузите кампанию из Keitaro "
+                "заново и повторите изменения",
+                code="stream_changed_in_keitaro",
+            )
+        else:
+            payload = [
+                {"offer_id": b.offer_id, "share": b.share, "state": b.state.value}
+                for b in offers
+                if b.state != OfferState.REMOVED
+            ]
+            kt_offers = (await self._keitaro.update_stream_offers(stream_id, payload)).offers
+
+        # Keitaro's answer becomes the published state; removed offers stay in the archive
+        sync_offers(stream, kt_offers)
+        stream.synced_at = datetime.now(UTC)
+        await session.commit()
+        logger.info(
+            "stream pushed to keitaro", extra={"stream_id": stream_id, "shares": _shares(stream)}
+        )
         return await load_stream(session, stream_id)
 
     async def _save(

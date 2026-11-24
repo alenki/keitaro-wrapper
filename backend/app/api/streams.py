@@ -44,3 +44,9 @@ async def pin_offer(
 @router.post("/{stream_id}/cancel", response_model=StreamOut)
 async def cancel_draft(stream_id: StreamId, session: SessionDep, editor: EditorDep):
     return stream_out(await editor.cancel(session, stream_id))
+
+
+@router.post("/{stream_id}/push", response_model=StreamOut)
+async def push_draft(stream_id: StreamId, session: SessionDep, editor: EditorDep):
+    """Publish the draft in Keitaro."""
+    return stream_out(await editor.push(session, stream_id))

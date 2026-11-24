@@ -5,6 +5,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from app.keitaro.errors import (
+    KeitaroAuthError,
+    KeitaroError,
+    KeitaroNotFound,
+    KeitaroRejected,
+    KeitaroUnavailable,
+)
 from app.log import request_id_var
 
 
@@ -61,6 +68,22 @@ async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResp
     return error_response(422, "validation_error", "Проверьте введённые данные", details)
 
 
+async def _keitaro_error(_: Request, exc: KeitaroError) -> JSONResponse:
+    if isinstance(exc, KeitaroAuthError):
+        return error_response(
+            502, "keitaro_auth", "Keitaro не принял API-ключ, проверьте KEITARO_API_KEY"
+        )
+    if isinstance(exc, KeitaroUnavailable):
+        return error_response(
+            502, "keitaro_unavailable", "Keitaro сейчас недоступен, попробуйте ещё раз"
+        )
+    if isinstance(exc, KeitaroNotFound):
+        return error_response(404, "keitaro_not_found", f"Не найдено в Keitaro: {exc.message}")
+    if isinstance(exc, KeitaroRejected):
+        return error_response(502, "keitaro_rejected", f"Keitaro отклонил запрос: {exc.message}")
+    return error_response(502, "keitaro_error", exc.message)
+
+
 async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
     if exc.status_code == 404:
         return error_response(404, "not_found", "Не найдено")
@@ -71,5 +94,6 @@ async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
 
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _app_error)
+    app.add_exception_handler(KeitaroError, _keitaro_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(HTTPException, _http_error)

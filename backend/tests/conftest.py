@@ -11,6 +11,7 @@ from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.main import create_app
+from tests.fake_keitaro import FakeKeitaro
 from tests.helpers import TEST_DATABASE_URL, make_settings
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -56,10 +57,19 @@ async def clean_db(db_engine):
 
 
 @pytest.fixture
-def make_client(clean_db):
+def fake_keitaro() -> FakeKeitaro:
+    return FakeKeitaro()
+
+
+@pytest.fixture
+def make_client(clean_db, fake_keitaro):
     @asynccontextmanager
     async def factory(**settings_overrides):
-        app = create_app(make_settings(**settings_overrides))
+        app = create_app(
+            make_settings(**settings_overrides),
+            keitaro_transport=httpx.ASGITransport(app=fake_keitaro.app),
+            keitaro_retry_delays=(0, 0),
+        )
         transport = httpx.ASGITransport(app=app)
         async with (
             LifespanManager(app),

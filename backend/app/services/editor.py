@@ -132,8 +132,8 @@ class Editor:
     async def push(self, session: AsyncSession, stream_id: int) -> Stream:
         """Send the draft to Keitaro.
 
-        The stream row stays locked while Keitaro is called (at most the client timeout), so
-        two pushes of one stream can't interleave.
+        The stream row stays locked while Keitaro is called (a GET and a PUT, each bounded by
+        the client timeout and its retries), so two pushes of one stream can't interleave.
         """
         stream = await lock_stream(session, stream_id)
         if not is_dirty(stream):

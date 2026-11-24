@@ -1,6 +1,21 @@
 name: keitaro-wrapper
 
 services:
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://wrapper:wrapper@db:5432/wrapper
+      KEITARO_URL: ${KEITARO_URL:-https://keitaro-for-tests.etolegko.com}
+      KEITARO_API_KEY: ${KEITARO_API_KEY:-}
+      CAMPAIGN_PREFIX: ${CAMPAIGN_PREFIX:-test_karaf_}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    restart: unless-stopped
+
   db:
     image: postgres:17-alpine
     environment:
@@ -8,6 +23,7 @@ services:
       POSTGRES_PASSWORD: wrapper
       POSTGRES_DB: wrapper
     ports:
+      # Published only on localhost, for running the tests from the host
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data

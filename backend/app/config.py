@@ -37,6 +37,14 @@ class Settings(DatabaseSettings):
     # Built frontend; by default backend/static, which exists only in the Docker image
     static_dir: str | None = None
 
+    @field_validator("keitaro_api_key")
+    @classmethod
+    def _require_key(cls, value: SecretStr) -> SecretStr:
+        # docker compose passes an empty string when .env has no key
+        if not value.get_secret_value().strip():
+            raise ValueError("is empty: set KEITARO_API_KEY in .env (see .env.example)")
+        return value
+
     @field_validator("keitaro_url")
     @classmethod
     def _normalize_url(cls, value: str) -> str:

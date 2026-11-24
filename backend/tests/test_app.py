@@ -78,6 +78,11 @@ def test_settings_require_api_key(monkeypatch):
         Settings(_env_file=None, database_url="postgresql+asyncpg://u:p@localhost/db")
 
 
+def test_settings_reject_an_empty_api_key():
+    with pytest.raises(ValidationError, match="KEITARO_API_KEY"):
+        make_settings(keitaro_api_key="  ")
+
+
 def test_settings_reject_database_url_without_asyncpg_driver():
     with pytest.raises(ValidationError, match="database_url"):
         make_settings(database_url="postgresql://u:p@localhost/db")

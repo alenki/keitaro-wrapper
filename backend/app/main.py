@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from app.api import campaigns, catalog, health, streams
 from app.config import Settings, get_settings
 from app.db import create_engine
 from app.errors import register_error_handlers
+from app.frontend import DEFAULT_STATIC_DIR, mount_frontend
 from app.keitaro.client import KeitaroClient
 from app.log import setup_logging
 from app.middleware import RequestContextMiddleware
@@ -66,4 +68,6 @@ def create_app(
     app.include_router(catalog.router, prefix="/api")
     app.include_router(campaigns.router, prefix="/api")
     app.include_router(streams.router, prefix="/api")
+    # Last, so the catch-all route of the app never shadows the API
+    mount_frontend(app, Path(settings.static_dir) if settings.static_dir else DEFAULT_STATIC_DIR)
     return app

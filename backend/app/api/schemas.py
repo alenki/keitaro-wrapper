@@ -6,10 +6,12 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, StringConstraint
 
 from app.models import OfferState
 
+# ISO 3166-1 alpha-2, the codes Keitaro's country filter uses
+COUNTRY_CODES = sorted(country.alpha_2 for country in pycountry.countries)
+
 
 def is_country_code(code: str) -> bool:
-    """ISO 3166-1 alpha-2, the codes Keitaro's country filter uses."""
-    return len(code) == 2 and code.isalpha() and pycountry.countries.get(alpha_2=code) is not None
+    return code in COUNTRY_CODES
 
 
 class CampaignCreate(BaseModel):
@@ -50,6 +52,7 @@ class NamedOut(BaseModel):
 
 class CampaignFormOut(BaseModel):
     prefix: str
+    countries: list[str]
     domains: list[NamedOut]
     groups: list[NamedOut]
     traffic_sources: list[NamedOut]

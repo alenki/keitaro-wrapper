@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.deps import CatalogDep, SettingsDep
-from app.api.schemas import CampaignFormOut, NamedOut, OfferOut
+from app.api.schemas import COUNTRY_CODES, CampaignFormOut, NamedOut, OfferOut
 
 router = APIRouter(tags=["catalog"])
 
@@ -19,10 +19,11 @@ async def search_offers(
 
 @router.get("/campaign-form", response_model=CampaignFormOut)
 async def campaign_form(catalog: CatalogDep, settings: SettingsDep):
-    """What the new campaign form needs: the name prefix and the Keitaro lists."""
+    """What the new campaign form needs: the name prefix, country codes and Keitaro lists."""
     options = await catalog.campaign_form_options()
     return CampaignFormOut(
         prefix=settings.campaign_prefix,
+        countries=COUNTRY_CODES,
         domains=[NamedOut.model_validate(d) for d in options.domains],
         groups=[NamedOut.model_validate(g) for g in options.groups],
         traffic_sources=[NamedOut.model_validate(s) for s in options.traffic_sources],

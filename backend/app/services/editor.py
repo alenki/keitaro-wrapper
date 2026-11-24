@@ -6,12 +6,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.errors import NotFoundError
+from app.errors import ConflictError, InvalidInputError, NotFoundError
 from app.keitaro.client import KeitaroClient
 from app.keitaro.errors import KeitaroNotFound
 from app.keitaro.schemas import KtCampaign, KtStream, KtStreamOffer
 from app.models import Campaign, OfferState, Stream, StreamOffer
 from app.services.catalog import Catalog
+from app.services.shares import rebalance
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,131 @@ class Editor:
             extra={"campaign_id": campaign_id, "streams": len(kt_streams)},
         )
         return await load_campaign(session, campaign_id)
+
+    # Draft actions change only the local copy. Keitaro is untouched until push.
+
+    async def add_offer(self, session: AsyncSession, stream_id: int, offer_id: int) -> Stream:
+        stream = await lock_stream(session, stream_id)
+        binding = _find_binding(stream, offer_id)
+        if binding is not None:
+            if binding.state != OfferState.REMOVED:
+                raise ConflictError("Этот оффер уже есть в потоке", code="offer_already_added")
+            _bring_back(binding)
+        else:
+            offer = await self._catalog.find_offer(offer_id)
+            if offer is None or offer.state != "active":
+                message = f"Оффер {offer_id} не найден в Keitaro"
+                raise InvalidInputError(
+                    message, details=[{"field": "offer_id", "message": message}]
+                )
+            stream.offers.append(
+                StreamOffer(
+                    offer_id=offer_id,
+                    position=_next_position(stream),
+                    state=OfferState.ACTIVE,
+                    share=0,
+                    pinned=False,
+                )
+            )
+        return await self._save(session, stream, "offer added to draft", offer_id)
+
+    async def remove_offer(self, session: AsyncSession, stream_id: int, offer_id: int) -> Stream:
+        stream = await lock_stream(session, stream_id)
+        binding = _get_binding(stream, offer_id)
+        if binding.state == OfferState.REMOVED:
+            raise ConflictError("Оффер уже удалён из потока", code="offer_already_removed")
+        active = [b for b in stream.offers if b.state == OfferState.ACTIVE]
+        if active == [binding]:
+            raise ConflictError(
+                "Последний активный оффер удалить нельзя: поток останется без офферов",
+                code="last_active_offer",
+            )
+        if binding.published_state is None:
+            # It never reached Keitaro, so removing it just undoes the add
+            stream.offers.remove(binding)
+        else:
+            binding.state = OfferState.REMOVED
+            binding.pinned = False
+        return await self._save(session, stream, "offer removed in draft", offer_id)
+
+    async def restore_offer(self, session: AsyncSession, stream_id: int, offer_id: int) -> Stream:
+        stream = await lock_stream(session, stream_id)
+        binding = _get_binding(stream, offer_id)
+        if binding.state != OfferState.REMOVED:
+            raise ConflictError("Вернуть можно только удалённый оффер", code="offer_not_removed")
+        _bring_back(binding)
+        return await self._save(session, stream, "offer brought back in draft", offer_id)
+
+    async def set_pinned(
+        self, session: AsyncSession, stream_id: int, offer_id: int, pinned: bool
+    ) -> Stream:
+        stream = await lock_stream(session, stream_id)
+        binding = _get_binding(stream, offer_id)
+        if binding.state != OfferState.ACTIVE:
+            raise ConflictError("Закрепить можно только активный оффер", code="offer_not_active")
+        binding.pinned = pinned
+        # Pinning keeps the current number; an unpinned offer joins the even split again
+        action = "offer pinned" if pinned else "offer unpinned"
+        return await self._save(session, stream, action, offer_id, rebalance=not pinned)
+
+    async def cancel(self, session: AsyncSession, stream_id: int) -> Stream:
+        """Throw the draft away: back to what Keitaro has."""
+        stream = await lock_stream(session, stream_id)
+        for binding in list(stream.offers):
+            if binding.published_state is None:
+                stream.offers.remove(binding)
+            else:
+                binding.state = binding.published_state
+                binding.share = binding.published_share or 0
+        await session.commit()
+        logger.info("draft cancelled", extra={"stream_id": stream_id})
+        return await load_stream(session, stream_id)
+
+    async def _save(
+        self,
+        session: AsyncSession,
+        stream: Stream,
+        action: str,
+        offer_id: int,
+        *,
+        rebalance: bool = True,
+    ) -> Stream:
+        if rebalance:
+            _rebalance(stream)
+        await session.commit()
+        logger.info(
+            action,
+            extra={"stream_id": stream.id, "offer_id": offer_id, "shares": _shares(stream)},
+        )
+        return await load_stream(session, stream.id)
+
+
+async def lock_stream(session: AsyncSession, stream_id: int) -> Stream:
+    """Stream row locked until the transaction ends, so changes to one stream take turns."""
+    stream = await session.scalar(
+        select(Stream)
+        .where(Stream.id == stream_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if stream is None:
+        raise NotFoundError(
+            "Поток не найден, загрузите кампанию из Keitaro заново", code="stream_not_found"
+        )
+    if not stream.has_offers:
+        raise ConflictError(
+            "В этом потоке нет офферов, его нельзя редактировать", code="stream_without_offers"
+        )
+    return stream
+
+
+async def load_stream(session: AsyncSession, stream_id: int) -> Stream:
+    stream = await session.scalar(
+        select(Stream).where(Stream.id == stream_id).execution_options(populate_existing=True)
+    )
+    if stream is None:
+        raise NotFoundError("Поток не найден", code="stream_not_found")
+    return stream
 
 
 async def load_campaign(session: AsyncSession, campaign_id: int) -> Campaign:
@@ -153,6 +279,38 @@ def is_dirty(stream: Stream) -> bool:
         or binding.share != binding.published_share
         for binding in stream.offers
     )
+
+
+def _find_binding(stream: Stream, offer_id: int) -> StreamOffer | None:
+    return next((b for b in stream.offers if b.offer_id == offer_id), None)
+
+
+def _get_binding(stream: Stream, offer_id: int) -> StreamOffer:
+    binding = _find_binding(stream, offer_id)
+    if binding is None:
+        raise NotFoundError(f"Оффера {offer_id} нет в этом потоке", code="offer_not_in_stream")
+    return binding
+
+
+def _bring_back(binding: StreamOffer) -> None:
+    binding.state = OfferState.ACTIVE
+    binding.pinned = False
+
+
+def _next_position(stream: Stream) -> int:
+    return max((binding.position for binding in stream.offers), default=0) + 1
+
+
+def _rebalance(stream: Stream) -> None:
+    offers = sorted(stream.offers, key=lambda binding: binding.position)
+    for binding, share in zip(offers, rebalance(offers), strict=True):
+        binding.share = share
+
+
+def _shares(stream: Stream) -> list[list[int]]:
+    """[offer_id, share] pairs for the log line."""
+    offers = sorted(stream.offers, key=lambda binding: binding.position)
+    return [[b.offer_id, b.share] for b in offers if b.state != OfferState.REMOVED]
 
 
 def _state_from_keitaro(state: str) -> OfferState:

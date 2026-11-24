@@ -55,6 +55,14 @@ class CampaignFormOut(BaseModel):
     traffic_sources: list[NamedOut]
 
 
+class AddOffer(BaseModel):
+    offer_id: PositiveInt
+
+
+class PinOffer(BaseModel):
+    pinned: bool
+
+
 class CampaignListItem(BaseModel):
     id: int
     name: str

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app import __version__
-from app.api import campaigns, catalog, health
+from app.api import campaigns, catalog, health, streams
 from app.config import Settings, get_settings
 from app.db import create_engine
 from app.errors import register_error_handlers
@@ -65,4 +65,5 @@ def create_app(
     app.include_router(health.router)
     app.include_router(catalog.router, prefix="/api")
     app.include_router(campaigns.router, prefix="/api")
+    app.include_router(streams.router, prefix="/api")
     return app

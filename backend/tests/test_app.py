@@ -98,6 +98,13 @@ def test_api_key_is_not_shown_in_settings_repr():
     assert "test-key" not in repr(make_settings())
 
 
+def test_json_log_line_drops_uvicorn_color_codes():
+    record = logging.makeLogRecord({"msg": "Started server process"})
+    record.color_message = "Started server process [\x1b[36m%d\x1b[0m]"
+
+    assert "color_message" not in json.loads(JsonFormatter().format(record))
+
+
 def test_json_log_line_has_request_id_and_extra_fields():
     token = request_id_var.set("req-1")
     try:

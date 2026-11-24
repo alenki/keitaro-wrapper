@@ -14,6 +14,7 @@ from app.keitaro.client import KeitaroClient
 from app.log import setup_logging
 from app.middleware import RequestContextMiddleware
 from app.services.catalog import Catalog
+from app.services.creator import CampaignCreator
 from app.services.editor import Editor
 
 
@@ -43,6 +44,7 @@ def create_app(
         catalog = Catalog(keitaro, session_factory, settings.catalog_ttl_seconds)
         app.state.catalog = catalog
         app.state.editor = Editor(keitaro, catalog)
+        app.state.creator = CampaignCreator(keitaro, catalog, settings.campaign_prefix)
         try:
             yield
         finally:

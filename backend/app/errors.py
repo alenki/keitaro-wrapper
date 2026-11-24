@@ -44,6 +44,13 @@ class InvalidInputError(AppError):
     code = "validation_error"
 
 
+class CreationFailed(AppError):
+    """Keitaro accepted the campaign but not its streams."""
+
+    status_code = 502
+    code = "campaign_not_created"
+
+
 def error_response(
     status_code: int, code: str, message: str, details: Any = None, headers: dict | None = None
 ) -> JSONResponse:

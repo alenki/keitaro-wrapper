@@ -1,8 +1,36 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+import pycountry
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, StringConstraints, field_validator
 
 from app.models import OfferState
+
+
+def is_country_code(code: str) -> bool:
+    """ISO 3166-1 alpha-2, the codes Keitaro's country filter uses."""
+    return len(code) == 2 and code.isalpha() and pycountry.countries.get(alpha_2=code) is not None
+
+
+class CampaignCreate(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    geo: Annotated[list[str], Field(min_length=1, max_length=20)]
+    offer_id: PositiveInt
+    domain_id: PositiveInt
+    group_id: PositiveInt
+    traffic_source_id: PositiveInt
+
+    @field_validator("geo")
+    @classmethod
+    def _normalize_geo(cls, codes: list[str]) -> list[str]:
+        result: list[str] = []
+        for raw in codes:
+            code = raw.strip().upper()
+            if not is_country_code(code):
+                raise ValueError(f"Неизвестный код страны: {code or raw!r}")
+            if code not in result:
+                result.append(code)
+        return result
 
 
 class OfferOut(BaseModel):
